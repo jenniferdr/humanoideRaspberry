@@ -123,15 +123,15 @@ int main (int argc, char ** argv) {
 	/*******  Seguir Pelota **********/
 	if (posY < horizonIni.y){
 	  write( USB, "a", 1 );
-	  cout << " Camino hacia adelante";
+	  cout << " Camino hacia adelante" << endl ;
 	  
 	} else if (posX < verticalIni.x){
 	  write( USB, "i", 1 );
-	  cout << " Camino a la Izq";
+	  cout << " Camino a la Izq"  << endl;
 	  
 	} else { 
 	  write( USB, "d", 1 );
-	  cout << " Camino a la Derecha"  ; 
+	  cout << " Camino a la Derecha" << endl ; 
 	}
       }
       iLastX = posX;

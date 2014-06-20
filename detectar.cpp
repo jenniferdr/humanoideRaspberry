@@ -1,25 +1,26 @@
 #include <iostream>
+#include <stdio.h>
+#include <string>   // para strings
+#include <iomanip>  // para controlar presicion punto flotante
+#include <sstream>  // conversion de string a numeros
+
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
-#include <stdio.h>
 #include "opencv2/opencv.hpp"
 #include "opencv2/core/core.hpp"
 #include "opencv2/features2d/features2d.hpp"
-
 #include "opencv2/calib3d/calib3d.hpp"
 //#include "opencv2/nonfree/nonfree.hpp"
 
+#include <termios.h> // para leer puerto serial
 
-#include <string>   // for strings
-#include <iomanip>  // for controlling float print precision
-#include <sstream>  // string to number conversion
-
-#include "RaspiCamCV.h"
+#include "RaspiCamCV.h" // para controlar la Pi-camara
 
 using namespace cv;
 using namespace std;
 
-// valor de la presicion al comparar las imagenes valores 15-30 difieren en gran cantidad valores 30- infinito mas se parecen
+/* valor de la presicion al comparar las imagenes valores 15-30 difieren
+ * en gran cantidad valores 30-infinito mas se parecen */
 #define presicion 40 
 
 
@@ -46,15 +47,11 @@ double getPSNR(const Mat& I1, const Mat& I2)
 
 
 int main (int argc, char ** argv) {
-
-  // Valor del trigger 
+ 
   int trigger = 35;
-  
-  // Valor del retardo
   int delay = 10;
   
-  // capturar la camara en vivo 
-  // "0" es el numero del dspositivo 
+  // capturar la camara en vivo. Camara 0 
   RaspiCamCvCapture * camara = raspiCamCvCreateCameraCapture(0);
   
   /*if (!camara.isOpened()) {
@@ -62,34 +59,12 @@ int main (int argc, char ** argv) {
     return -1;
     }*/
   
-  
-  //stringstream conv;
-  
-  //const string Referencia = "prueba.mp4";
-    
-  //VideoCapture referenciaOscuro(Referencia);
-  
-  
-  //IplImage* imgRef  = raspiCamCvQueryFrame(camara);
-  //Mat imagenReferencia = Mat(imgRef,false);
-  /*if (!referenciaOscuro.isOpened())
-    {
-        cout  << "NO SE PUEDE ABRIR IMAGEN DE REFERENCIA " << Referencia << endl;
-        return -1;
-    }
-  // HAY que verificar que el tamano de la camara y de la foto sea el mismo 
-  Size refS = Size((int) referenciaOscuro.get(CV_CAP_PROP_FRAME_WIDTH),
-		   (int) referenciaOscuro.get(CV_CAP_PROP_FRAME_HEIGHT));
-  */
-  //imshow("referencia", imagenReferencia); //show the original image
-  
   // Crea una nueva ventana
   namedWindow("video",CV_WINDOW_AUTOSIZE); 
   
   /* Para calcular el HUE, Saturacion y Valor
    * de la pelota
    */
-
   int iLowH = 0;
   int iHighH = 94; // Color especifico a buscar
     
@@ -99,7 +74,7 @@ int main (int argc, char ** argv) {
   int iLowV = 78;
   int iHighV = 255;
   
-   // Crear un control para cambiar la HUE (0 - 179)
+  // Crear un control para cambiar la HUE (0 - 179)
   createTrackbar("LowH", "video", &iLowH, 179); //Hue (0 - 179)
   createTrackbar("HighH", "video", &iHighH, 179);
     
@@ -115,7 +90,6 @@ int main (int argc, char ** argv) {
   /* Para calcular el HUE, Saturacion y Valor
    * de la Arqueria
    */
-
   int ALowH = 96 ;
   int AHighH = 120; // Color especifico a buscar
     
@@ -137,8 +111,7 @@ int main (int argc, char ** argv) {
   createTrackbar("LowV", "video1", &ALowV, 255);//Value (0 - 255)
   createTrackbar("HighV", "video1", &AHighV, 255);
   
-
-   
+  
   //Un cuadro temporal
   Mat imgTmp;
   imgTmp  = raspiCamCvQueryFrame(camara); 
@@ -168,7 +141,7 @@ int main (int argc, char ** argv) {
 	}*/
     Mat imgHSV;
     
-///////////////////////////////// PSNR /////////////////////////////////////////////////
+    ///////////////////////////////// PSNR ////////////////////////////////
 	  
       valorPSNR = getPSNR(imgOriginal,imagenReferencia);
       //cout << setiosflags(ios::fixed) << setprecision(3) << valorPSNR << "dB";
@@ -185,8 +158,6 @@ int main (int argc, char ** argv) {
       Mat imgArqueria;
       /********* PARA LA PELOTA  ********/
       
-      
-
       inRange(imgHSV, Scalar(iLowH, iLowS, iLowV), Scalar(iHighH, iHighS, iHighV), imgFiltro); //Threshold the image
     
       //morphological opening (removes small objects from the foreground)
@@ -209,7 +180,7 @@ int main (int argc, char ** argv) {
       dilate( imgArqueria, imgArqueria, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) ); 
       erode(imgArqueria, imgArqueria, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) );
      
-	  /********** Para PElota ******/
+      /********** Para Pelota ******/
       Moments pMomentos = moments(imgFiltro);
       double dM01 = pMomentos.m01;
       double dM10 = pMomentos.m10;
@@ -220,54 +191,52 @@ int main (int argc, char ** argv) {
       double AM10 = AMomentos.m10;
       double AArea = AMomentos.m00;
 
-	  if (dArea > 10000)
-	{
-	 
-	  int posX = dM10 / dArea;
-	  int posY = dM01 / dArea;        
+      if (dArea > 10000){
+	
+	int posX = dM10 / dArea;
+	int posY = dM01 / dArea;        
+	
+	// Arqueria
+	
+	int posX1 = AM10 / AArea;
+	int posY1 = AM01 / AArea;        
+	
+	CvPoint horizonIni = cvPoint(00,(imgLines.size().height)/2);
+	CvPoint horizonFin = cvPoint(imgLines.size().width,(imgLines.size().height)/2); 
+	CvPoint verticalIni = cvPoint((imgLines.size().width)/2,(imgLines.size().height)/2);
+	CvPoint verticalFin = cvPoint(((imgLines.size().width)/2),imgLines.size().height); 
+	
+	if (iLastX >= 0 && iLastY >= 0 && posX >= 0 && posY >= 0){
+
+	  // horizontal
+	  line(imgLines,horizonIni,horizonFin, cvScalar(0,255,0), 1);
+	  // vertical
+	  line(imgLines, verticalIni,verticalFin, cvScalar(0,255,0), 1);
 	  
-      // Arqueria
+	  cout <<  imgTmp.size().height<< endl;   	     
+	  // Pelota
+	  //circle(imgLines,Point2f(posX,posY),50,Scalar(255,0,0),1,CV_AA,0);
+	  // Arqueria
+	  circle(imgLines,Point2f(posX1,posY1),50,Scalar(255,0,0),1,CV_AA,0);
 	  
-	  int posX1 = AM10 / AArea;
-	  int posY1 = AM01 / AArea;        
+	  /*******  Seguir Pelota **********/
 
-	  CvPoint horizonIni = cvPoint(00,(imgLines.size().height)/2);
-	  CvPoint horizonFin = cvPoint(imgLines.size().width,(imgLines.size().height)/2); 
-	  CvPoint verticalIni = cvPoint((imgLines.size().width)/2,(imgLines.size().height)/2);
-	  CvPoint verticalFin = cvPoint(((imgLines.size().width)/2),imgLines.size().height); 
-
-	  if (iLastX >= 0 && iLastY >= 0 && posX >= 0 && posY >= 0)
-	    {
-
-			// horizontal
-			line(imgLines,horizonIni,horizonFin, cvScalar(0,255,0), 1);
-			// vertical
-			line(imgLines, verticalIni,verticalFin, cvScalar(0,255,0), 1);
-
-			cout <<  imgTmp.size().height<< endl;   	     
-			// Pelota
-			//circle(imgLines,Point2f(posX,posY),50,Scalar(255,0,0),1,CV_AA,0);
-			// Arqueria
-			circle(imgLines,Point2f(posX1,posY1),50,Scalar(255,0,0),1,CV_AA,0);
-
-			/*******  Seguir Pelota **********/
-
-			if (posY1 < horizonIni.y){
-
-				cout << " Camino hacia adelante";
-
-			} else {
-				if (posX1 < verticalIni.x){
-					cout << " Camino a la Izq";
-
-				} else 
-					cout << " Camino a la Derecha"  ; 
-			}
-		}
-
-	  iLastX = posX;
-	  iLastY = posY;
+	  if (posY1 < horizonIni.y){
+	    write(USB, "a",1);
+	    cout << " Camino hacia adelante";
+	    
+	  } else {
+	    if (posX1 < verticalIni.x){
+	      cout << " Camino a la Izq";
+	      
+	    } else 
+	      cout << " Camino a la Derecha"  ; 
+	  }
 	}
+	
+	iLastX = posX;
+	iLastY = posY;
+      }
       imshow("Thresholded Image", imgFiltro); //show the thresholded image
       imshow("Thresholded1 Image", imgArqueria); //show the thresholded image
      

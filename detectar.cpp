@@ -13,8 +13,11 @@
 //#include "opencv2/nonfree/nonfree.hpp"
 
 #include <termios.h> // para leer puerto serial
+#include <fcntl.h>   // Para abrir puerto USB
+#include <errno.h>   // Def de num de errores
 
 #include "RaspiCamCV.h" // para controlar la Pi-camara
+
 
 using namespace cv;
 using namespace std;
@@ -23,34 +26,34 @@ using namespace std;
  * en gran cantidad valores 30-infinito mas se parecen */
 #define presicion 40 
 
+/* Valor HSV de la pelota (Hue, Saturation y Value) */
+int iLowH = 0;
+int iHighH = 94; // Color especifico a buscar
 
-double getPSNR(const Mat& I1, const Mat& I2)
-{
- Mat s1;
- absdiff(I1, I2, s1);       // |I1 - I2|
- s1.convertTo(s1, CV_32F);  // cannot make a square on 8 bits
- s1 = s1.mul(s1);           // |I1 - I2|^2
+int iLowS = 75; 
+int iHighS = 255;
 
- Scalar s = sum(s1);         // sum elements per channel
+int iLowV = 78;
+int iHighV = 255;
 
- double sse = s.val[0] + s.val[1] + s.val[2]; // sum channels
+/* Valor HSV de la arqueria (Hue, Saturation y Value) */
+int ALowH = 96 ;
+int AHighH = 120; // Color especifico a buscar
 
- if( sse <= 1e-10) // for small values return zero
-     return 0;
- else
- {
-     double  mse =sse /(double)(I1.channels() * I1.total());
-     double psnr = 10.0*log10((255*255)/mse);
-     return psnr;
- }
-}
+int ALowS = 116; 
+int AHighS = 199;
 
+int ALowV = 71;
+int AHighV = 255;
+
+void crearControlesPelota();
+void crearControlesArqueria();
+void configurarParametrosUSB(int USB);
+Mat filtrarPelota(Mat imgHSV);
+Mat filtrarArqueria(Mat imgHSV);
 
 int main (int argc, char ** argv) {
  
-  int trigger = 35;
-  int delay = 10;
-  
   // capturar la camara en vivo. Camara 0 
   RaspiCamCvCapture * camara = raspiCamCvCreateCameraCapture(0);
   
@@ -59,198 +62,195 @@ int main (int argc, char ** argv) {
     return -1;
     }*/
   
-  // Crea una nueva ventana
-  namedWindow("video",CV_WINDOW_AUTOSIZE); 
+  crearControlesPelota();
+  crearControlesArqueria();
+
+  // Comunicacion con Arbotix, abrir puerto
+  int USB = open("/dev/ttyUSB0", O_RDWR| O_NOCTTY );
+  configurarParametrosUSB(USB);
   
-  /* Para calcular el HUE, Saturacion y Valor
-   * de la pelota
-   */
-  int iLowH = 0;
-  int iHighH = 94; // Color especifico a buscar
-    
-  int iLowS = 75; 
-  int iHighS = 255;
-  
-  int iLowV = 78;
-  int iHighV = 255;
-  
-  // Crear un control para cambiar la HUE (0 - 179)
-  createTrackbar("LowH", "video", &iLowH, 179); //Hue (0 - 179)
-  createTrackbar("HighH", "video", &iHighH, 179);
-    
-  // Crear un control para cambiar la saturacion (0-255)
-  createTrackbar("LowS", "video", &iLowS, 255); //Saturation (0 - 255)
-  createTrackbar("HighS", "video", &iHighS, 255);
-    
-  // Crear un control para cambiar el valor (0-255)
-  createTrackbar("LowV", "video", &iLowV, 255);//Value (0 - 255)
-  createTrackbar("HighV", "video", &iHighV, 255);
-  
-  namedWindow("video1",CV_WINDOW_AUTOSIZE);
-  /* Para calcular el HUE, Saturacion y Valor
-   * de la Arqueria
-   */
-  int ALowH = 96 ;
-  int AHighH = 120; // Color especifico a buscar
-    
-  int ALowS = 116; 
-  int AHighS = 199;
-    
-  int ALowV = 71;
-  int AHighV = 255;
-  
-  // Crear un control para cambiar la HUE (0 - 179)
-  createTrackbar("LowH", "video1", &ALowH, 179); //Hue (0 - 179)
-  createTrackbar("HighH", "video1", &AHighH, 179);
-    
-  // Crear un control para cambiar la saturacion (0-255)
-  createTrackbar("LowS", "video1", &ALowS, 255); //Saturation (0 - 255)
-  createTrackbar("HighS", "video1", &AHighS, 255);
-    
-  // Crear un control para cambiar el valor (0-255)
-  createTrackbar("LowV", "video1", &ALowV, 255);//Value (0 - 255)
-  createTrackbar("HighV", "video1", &AHighV, 255);
-  
-  
-  //Un cuadro temporal
-  Mat imgTmp;
-  imgTmp  = raspiCamCvQueryFrame(camara); 
- 
   int iLastX = -1; 
   int iLastY = -1;
 
-  Mat imagenReferencia;
-  double valorPSNR;
-  imagenReferencia = imgTmp;
-  imshow("Referencia", imagenReferencia); //show the original image
+  Mat imgOriginal;
+  imgOriginal = raspiCamCvQueryFrame(camara);
+  //por hacer> verificar si no hubo error
+  Size sizeImgOrig = imgOriginal.size();
+
+  //Imagen negra del tamano de la camara 
+  Mat imgLines = Mat::zeros(  sizeImgOrig , CV_8UC3 );
+
+  // Puntos para seccionar la imagen
+  CvPoint horizonIni = cvPoint(00,(imgLines.size().height)/2);
+  CvPoint horizonFin =
+    cvPoint(imgLines.size().width,(imgLines.size().height)/2); 
+  CvPoint verticalIni =
+    cvPoint((imgLines.size().width)/2,(imgLines.size().height)/2);
+  CvPoint verticalFin =
+    cvPoint(((imgLines.size().width)/2),imgLines.size().height);
 
   while (1){
-    Mat cuadro;
-    Mat imgOriginal;
-    //Create a black image with the size as the camera output
-    Mat imgLines = Mat::zeros( imgTmp.size(), CV_8UC3 );;
-    
-    IplImage* imgO = raspiCamCvQueryFrame(camara);
-    imgOriginal = Mat(imgO,false);
-    
-    //referenciaOscuro >> imagenReferencia;
-    /*if (!bSuccess) 
-      {
-	cout << "Cannot read a frame from video stream" << endl;
-	break;
-	}*/
+    imgOriginal = raspiCamCvQueryFrame(camara);
+    //por hacer> verificar si no hubo error  
+ 
+    imgLines = Mat::zeros(  sizeImgOrig , CV_8UC3 );
+
+    // Dibujar division de la pantalla
+    line(imgLines, horizonIni, horizonFin, cvScalar(0,255,0), 1);
+    line(imgLines, verticalIni,verticalFin, cvScalar(0,255,0), 1);
+
+    //Convertir el cuadro de BGR a HSV
     Mat imgHSV;
-    
-    ///////////////////////////////// PSNR ////////////////////////////////
-	  
-      valorPSNR = getPSNR(imgOriginal,imagenReferencia);
-      //cout << setiosflags(ios::fixed) << setprecision(3) << valorPSNR << "dB";
-      cout  << valorPSNR ;
-      if (valorPSNR > presicion){
-		  cout << "me cai hacia abajo ";
-		  
-      }
-	  
-      //Convertir el cuadro de BGR a HSV
-      cvtColor(imgOriginal, imgHSV, COLOR_BGR2HSV); 
-      Mat imgFiltro;
+    cvtColor(imgOriginal, imgHSV, COLOR_BGR2HSV);
+ 
+    /********** Para Pelota ******/
+    Mat imgPelota = filtrarPelota(imgHSV); 
 
-      Mat imgArqueria;
-      /********* PARA LA PELOTA  ********/
+    Moments pMomentos = moments(imgPelota);
+    double dM01 = pMomentos.m01;
+    double dM10 = pMomentos.m10;
+    double dArea = pMomentos.m00;
+    
+    if (dArea > 10000){
       
-      inRange(imgHSV, Scalar(iLowH, iLowS, iLowV), Scalar(iHighH, iHighS, iHighV), imgFiltro); //Threshold the image
-    
-      //morphological opening (removes small objects from the foreground)
-      erode(imgFiltro, imgFiltro, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) );
-      dilate( imgFiltro,imgFiltro, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) ); 
-     
-      //morphological closing (removes small holes from the foreground)
-      dilate( imgFiltro, imgFiltro, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) ); 
-      erode(imgFiltro, imgFiltro, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) );
+      int posX = dM10 / dArea;
+      int posY = dM01 / dArea;
 
-
-	  /********* PARA LA ARQUERIA ********/
-	  inRange(imgHSV, Scalar(ALowH, ALowS, ALowV), Scalar(AHighH, AHighS, AHighV), imgArqueria); //Threshold the image
+      if (iLastX >= 0 && iLastY >= 0 && posX >= 0 && posY >= 0){
+	   	     
+	circle(imgLines,Point2f(posX,posY),50,Scalar(255,0,0),1,CV_AA,0);
+	
+	/*******  Seguir Pelota **********/
+	if (posY < horizonIni.y){
+	  write( USB, "a", 1 );
+	  cout << " Camino hacia adelante";
 	  
-      //morphological opening (removes small objects from the foreground)
-      erode(imgArqueria, imgArqueria, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) );
-      dilate( imgArqueria,imgArqueria, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) ); 
-     
-      //morphological closing (removes small holes from the foreground)
-      dilate( imgArqueria, imgArqueria, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) ); 
-      erode(imgArqueria, imgArqueria, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) );
-     
-      /********** Para Pelota ******/
-      Moments pMomentos = moments(imgFiltro);
-      double dM01 = pMomentos.m01;
-      double dM10 = pMomentos.m10;
-      double dArea = pMomentos.m00;
-      /********* Para Arqueria *****/
-      Moments AMomentos = moments(imgArqueria);
-      double AM01 = AMomentos.m01;
-      double AM10 = AMomentos.m10;
-      double AArea = AMomentos.m00;
-
-      if (dArea > 10000){
-	
-	int posX = dM10 / dArea;
-	int posY = dM01 / dArea;        
-	
-	// Arqueria
-	
-	int posX1 = AM10 / AArea;
-	int posY1 = AM01 / AArea;        
-	
-	CvPoint horizonIni = cvPoint(00,(imgLines.size().height)/2);
-	CvPoint horizonFin = cvPoint(imgLines.size().width,(imgLines.size().height)/2); 
-	CvPoint verticalIni = cvPoint((imgLines.size().width)/2,(imgLines.size().height)/2);
-	CvPoint verticalFin = cvPoint(((imgLines.size().width)/2),imgLines.size().height); 
-	
-	if (iLastX >= 0 && iLastY >= 0 && posX >= 0 && posY >= 0){
-
-	  // horizontal
-	  line(imgLines,horizonIni,horizonFin, cvScalar(0,255,0), 1);
-	  // vertical
-	  line(imgLines, verticalIni,verticalFin, cvScalar(0,255,0), 1);
+	} else if (posX < verticalIni.x){
+	  write( USB, "i", 1 );
+	  cout << " Camino a la Izq";
 	  
-	  cout <<  imgTmp.size().height<< endl;   	     
-	  // Pelota
-	  //circle(imgLines,Point2f(posX,posY),50,Scalar(255,0,0),1,CV_AA,0);
-	  // Arqueria
-	  circle(imgLines,Point2f(posX1,posY1),50,Scalar(255,0,0),1,CV_AA,0);
-	  
-	  /*******  Seguir Pelota **********/
-
-	  if (posY1 < horizonIni.y){
-	    write(USB, "a",1);
-	    cout << " Camino hacia adelante";
-	    
-	  } else {
-	    if (posX1 < verticalIni.x){
-	      cout << " Camino a la Izq";
-	      
-	    } else 
-	      cout << " Camino a la Derecha"  ; 
-	  }
+	} else { 
+	  write( USB, "d", 1 );
+	  cout << " Camino a la Derecha"  ; 
 	}
-	
-	iLastX = posX;
-	iLastY = posY;
       }
-      imshow("Thresholded Image", imgFiltro); //show the thresholded image
-      imshow("Thresholded1 Image", imgArqueria); //show the thresholded image
-     
-      imgOriginal = imgOriginal + imgLines;
-      imshow("Original", imgOriginal); //show the original image
-     
-      if (waitKey(30) == 27) 
-	{
-	  cout << "esc key is pressed by user" << endl;
-	  break; 
-	}
+      iLastX = posX;
+      iLastY = posY;
     }
+      
+    /********* Para Arqueria *****/
+    Mat imgArqueria = filtrarArqueria(imgHSV);
+
+    Moments AMomentos = moments(imgArqueria);
+    double AM01 = AMomentos.m01;
+    double AM10 = AMomentos.m10;
+    double AArea = AMomentos.m00;
+    
+    if (AArea > 10000){
+      
+      // Arqueria
+      int posX1 = AM10 / AArea;
+      int posY1 = AM01 / AArea;          
+      
+      circle(imgLines,Point2f(posX1,posY1),50,Scalar(255,0,0),1,CV_AA,0);
+      
+    }
+    imshow("Imagen Filtrada Pelota", imgPelota);
+    imshow("Imagen Filtrada Arqueria", imgArqueria);
+    
+    imgOriginal = imgOriginal + imgLines;
+    imshow("Original", imgOriginal);
+    
+    if (waitKey(30) == 27) break; // Esc
+ 
+  }
   return 0;
   
 }
 
+void crearControlesPelota(){
+// Crea una nueva ventana
+  namedWindow("HSV Pelota",CV_WINDOW_AUTOSIZE); 
+  
+  // Crear un control para cambiar la HUE (0 - 179)
+  createTrackbar("LowH", "HSV Pelota", &iLowH, 179);
+  createTrackbar("HighH","HSV Pelota", &iHighH, 179);
+    
+  // Crear un control para cambiar la saturacion (0-255)
+  createTrackbar("LowS", "HSV Pelota", &iLowS, 255);
+  createTrackbar("HighS", "HSV Pelota", &iHighS, 255);
+    
+  // Crear un control para cambiar el valor (0-255)
+  createTrackbar("LowV","HSV Pelota", &iLowV, 255);
+  createTrackbar("HighV","HSV Pelota", &iHighV, 255);
+}
 
+void crearControlesArqueria(){
+  namedWindow("HSV Arqueria",CV_WINDOW_AUTOSIZE);
+  
+  // Crear un control para cambiar la HUE (0 - 179)
+  createTrackbar("LowH", "HSV Arqueria", &ALowH, 179);
+  createTrackbar("HighH","HSV Arqueria", &AHighH, 179);
+    
+  // Crear un control para cambiar la saturacion (0-255)
+  createTrackbar("LowS", "HSV Arqueria", &ALowS, 255);
+  createTrackbar("HighS","HSV Arqueria", &AHighS, 255);
+    
+  // Crear un control para cambiar el valor (0-255)
+  createTrackbar("LowV", "HSV Arqueria", &ALowV, 255);
+  createTrackbar("HighV","HSV Arqueria", &AHighV, 255);
+}
+
+void configurarParametrosUSB(int USB){
+  struct termios tty;
+  memset (&tty, 0, sizeof tty);
+  
+  /* Error Handling */
+  if ( tcgetattr ( USB, &tty ) != 0 ){
+    cout << "Error " << errno << " from tcgetattr: " 
+	 << strerror(errno) << endl;
+  }
+}
+
+Mat filtrarPelota(Mat imgHSV){
+
+  Mat imgFiltrada;
+
+  inRange(imgHSV, Scalar(iLowH, iLowS, iLowV),
+	  Scalar(iHighH, iHighS, iHighV), imgFiltrada);
+    
+  //morphological opening (removes small objects from the foreground)
+  erode(imgFiltrada, imgFiltrada,
+	getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) );
+  dilate( imgFiltrada,imgFiltrada,
+	  getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) ); 
+  
+  //morphological closing (removes small holes from the foreground)
+  dilate( imgFiltrada, imgFiltrada, 
+	  getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) ); 
+  erode(imgFiltrada, imgFiltrada,
+	getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) );
+
+  return imgFiltrada;
+}
+
+Mat filtrarArqueria(Mat imgHSV){
+  Mat imgFiltrada;
+
+  inRange(imgHSV, Scalar(ALowH, ALowS, ALowV), 
+	  Scalar(AHighH, AHighS, AHighV), imgFiltrada);
+  
+  //morphological opening (removes small objects from the foreground)
+  erode(imgFiltrada, imgFiltrada,
+	getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) );
+  dilate( imgFiltrada,imgFiltrada,
+	  getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) ); 
+  
+  //morphological closing (removes small holes from the foreground)
+  dilate( imgFiltrada, imgFiltrada,
+	  getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) ); 
+  erode(imgFiltrada, imgFiltrada,
+	getStructuringElement(MORPH_ELLIPSE, Size(5, 5)) );
+  
+  return imgFiltrada;
+}

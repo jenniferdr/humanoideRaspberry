@@ -62,8 +62,8 @@ int main (int argc, char ** argv) {
     return -1;
     }*/
   
-  crearControlesPelota();
-  crearControlesArqueria();
+  //crearControlesPelota();
+  //crearControlesArqueria();
 
   // Comunicacion con Arbotix, abrir puerto
   int USB = open("/dev/ttyUSB0", O_RDWR| O_NOCTTY );
@@ -74,6 +74,9 @@ int main (int argc, char ** argv) {
 
   Mat imgOriginal;
   imgOriginal = raspiCamCvQueryFrame(camara);
+  Mat imgReferencia;
+  imgReferencia = raspiCamCvQueryFrame(camara);
+  
   //por hacer> verificar si no hubo error
   Size sizeImgOrig = imgOriginal.size();
 
@@ -89,6 +92,38 @@ int main (int argc, char ** argv) {
   CvPoint verticalFin =
     cvPoint(((imgLines.size().width)/2),imgLines.size().height);
 
+
+
+ //////////////////////Histograma //////////////////////////////
+
+  Mat src, hsv;
+    
+  //   cvtColor(src, hsv, CV_BGR2HSV);
+  
+  // Quantize the hue to 30 levels
+    // and the saturation to 32 levels
+  int hbins = 30, sbins = 32;
+  int histSize[] = {hbins, sbins};
+  // hue varies from 0 to 179, see cvtColor
+  float hranges[] = { 0, 180 };
+  // saturation varies from 0 (black-gray-white) to
+  // 255 (pure spectrum color)
+  float sranges[] = { 0, 256 };
+  const float* ranges[] = { hranges, sranges };
+  MatND hist;
+  MatND hist1;
+  // we compute the histogram from the 0-th and 1-st channels
+  int channels[] = {0, 1};
+  
+  calcHist( &imgReferencia, 1, channels, Mat(), // do not use mask
+	    hist, 2, histSize, ranges,
+	    true, // the histogram is uniform
+	    false );
+  
+  double resul;
+  
+  ///////////////////////////////////////////////////////////////////
+  
   while (1){
     imgOriginal = raspiCamCvQueryFrame(camara);
     //por hacer> verificar si no hubo error  
@@ -103,6 +138,17 @@ int main (int argc, char ** argv) {
     Mat imgHSV;
     cvtColor(imgOriginal, imgHSV, COLOR_BGR2HSV);
  
+
+    //////////////////////// Comparando las imagenes /////////////////
+    calcHist( &imgOriginal, 1, channels, Mat(), // do not use mask
+	      hist1, 2, histSize, ranges,
+	      true, // the histogram is uniform
+	      false );
+    
+    resul = compareHist(hist,hist1, CV_COMP_CORREL );
+    cout << resul << " resullllltadossss "<< endl;
+    /////////////////////////////////////////////
+  
     /********** Para Pelota ******/
     Mat imgPelota = filtrarPelota(imgHSV); 
 
@@ -122,11 +168,11 @@ int main (int argc, char ** argv) {
 	
 	/*******  Seguir Pelota **********/
 	if (posY < horizonIni.y){
-	  write( USB, "a", 1 );
+	  write( USB, "w", 1 );
 	  cout << " Camino hacia adelante" << endl ;
 	  
 	} else if (posX < verticalIni.x){
-	  write( USB, "i", 1 );
+	  write( USB, "a", 1 );
 	  cout << " Camino a la Izq"  << endl;
 	  
 	} else { 
@@ -139,7 +185,7 @@ int main (int argc, char ** argv) {
     }
       
     /********* Para Arqueria *****/
-    Mat imgArqueria = filtrarArqueria(imgHSV);
+    /*Mat imgArqueria = filtrarArqueria(imgHSV);
 
     Moments AMomentos = moments(imgArqueria);
     double AM01 = AMomentos.m01;
@@ -152,11 +198,12 @@ int main (int argc, char ** argv) {
       int posX1 = AM10 / AArea;
       int posY1 = AM01 / AArea;          
       
-      circle(imgLines,Point2f(posX1,posY1),50,Scalar(255,0,0),1,CV_AA,0);
+      //circle(imgLines,Point2f(posX1,posY1),50,Scalar(255,0,0),1,CV_AA,0);
       
     }
-    imshow("Imagen Filtrada Pelota", imgPelota);
-    imshow("Imagen Filtrada Arqueria", imgArqueria);
+    */
+    //imshow("Imagen Filtrada Pelota", imgPelota);
+    //imshow("Imagen Filtrada Arqueria", imgArqueria);
     
     imgOriginal = imgOriginal + imgLines;
     imshow("Original", imgOriginal);

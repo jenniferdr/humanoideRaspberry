@@ -1,5 +1,6 @@
 #include <iostream>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string>   // para strings
 #include <iomanip>  // para controlar presicion punto flotante
 #include <sstream>  // conversion de string a numeros
@@ -10,7 +11,6 @@
 #include "opencv2/core/core.hpp"
 #include "opencv2/features2d/features2d.hpp"
 #include "opencv2/calib3d/calib3d.hpp"
-//#include "opencv2/nonfree/nonfree.hpp"
 
 #include <termios.h> // para leer puerto serial
 #include <fcntl.h>   // Para abrir puerto USB
@@ -28,12 +28,12 @@ using namespace std;
 
 /* Valor HSV de la pelota (Hue, Saturation y Value) */
 int iLowH = 0;
-int iHighH = 94; // Color especifico a buscar
+int iHighH = 30; // Color especifico a buscar
 
-int iLowS = 75; 
-int iHighS = 255;
+int iLowS = 70; 
+int iHighS = 231;
 
-int iLowV = 78;
+int iLowV = 101;
 int iHighV = 255;
 
 /* Valor HSV de la arqueria (Hue, Saturation y Value) */
@@ -123,8 +123,10 @@ int main (int argc, char ** argv) {
   double resul;
   
   ///////////////////////////////////////////////////////////////////
-  
+  char direccion = 'h';  
+
   while (1){
+    cout << "hol"<< endl ;
     imgOriginal = raspiCamCvQueryFrame(camara);
     //por hacer> verificar si no hubo error  
  
@@ -168,42 +170,30 @@ int main (int argc, char ** argv) {
 	
 	/*******  Seguir Pelota **********/
 	if (posY < horizonIni.y){
-	  write( USB, "w", 1 );
+	  if(direccion!= 'w'){
+	    write( USB, "w", 1 );
+	    direccion = 'w';
+	  }
 	  cout << " Camino hacia adelante" << endl ;
 	  
 	} else if (posX < verticalIni.x){
-	  write( USB, "a", 1 );
+	  if(direccion!= 'a'){
+	    write( USB, "a", 1 );
+	    direccion = 'a';
+	  }
 	  cout << " Camino a la Izq"  << endl;
 	  
 	} else { 
-	  write( USB, "d", 1 );
+	  if(direccion!= 'd'){
+	    write( USB, "d", 1 );
+	    direccion = 'd';
+	  }
 	  cout << " Camino a la Derecha" << endl ; 
 	}
       }
       iLastX = posX;
       iLastY = posY;
     }
-      
-    /********* Para Arqueria *****/
-    /*Mat imgArqueria = filtrarArqueria(imgHSV);
-
-    Moments AMomentos = moments(imgArqueria);
-    double AM01 = AMomentos.m01;
-    double AM10 = AMomentos.m10;
-    double AArea = AMomentos.m00;
-    
-    if (AArea > 10000){
-      
-      // Arqueria
-      int posX1 = AM10 / AArea;
-      int posY1 = AM01 / AArea;          
-      
-      //circle(imgLines,Point2f(posX1,posY1),50,Scalar(255,0,0),1,CV_AA,0);
-      
-    }
-    */
-    //imshow("Imagen Filtrada Pelota", imgPelota);
-    //imshow("Imagen Filtrada Arqueria", imgArqueria);
     
     imgOriginal = imgOriginal + imgLines;
     imshow("Original", imgOriginal);

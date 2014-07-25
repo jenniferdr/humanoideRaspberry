@@ -39,7 +39,8 @@ int main (int argc, char ** argv) {
  
   // capturar la camara en vivo. Camara 0 
   RaspiCamCvCapture * camara = raspiCamCvCreateCameraCapture(0);
-  
+  //VideoCapture camara(0);
+
   /*if (!camara.isOpened()) {
     cout << "No se pudo abrir la camara" << endl;
     return -1;
@@ -56,15 +57,17 @@ int main (int argc, char ** argv) {
 
   Mat imgOriginal;
   imgOriginal = raspiCamCvQueryFrame(camara);
+  //camara.read(imgOriginal); 
   //por hacer> verificar si no hubo error
 
   Size sizeImgOrig = imgOriginal.size();
 
   //Imagen negra del tamano de la camara 
   Mat imgLines = Mat::zeros(  sizeImgOrig , CV_8UC3 ); 
-
+  char letra = 'n';
   while (1){
     imgOriginal = raspiCamCvQueryFrame(camara);
+    //camara.read(imgOriginal); 
     //por hacer> verificar si no hubo error  
  
     imgLines = Mat::zeros(  sizeImgOrig , CV_8UC3 );
@@ -87,10 +90,18 @@ int main (int argc, char ** argv) {
       if (iLastX >= 0 && iLastY >= 0 && posX >= 0 && posY >= 0){
 	   	     
 	circle(imgLines,Point2f(posX,posY),50,Scalar(255,0,0),1,CV_AA,0);
-	write( USB, "y", 1 );
+	if(letra != 'y'){
+	  write( USB, "y", 1 );
+	  letra = 'y';
+	}
       }
       iLastX = posX;
       iLastY = posY;
+    }else{
+      if(letra == 'y'){
+	write( USB, "n", 1 );
+	letra = 'n';
+      }
     }
     
     imgOriginal = imgOriginal + imgLines;

@@ -126,7 +126,6 @@ int main (int argc, char ** argv) {
   char direccion = 'h';  
 
   while (1){
-    cout << "hol"<< endl ;
     imgOriginal = raspiCamCvQueryFrame(camara);
     //por hacer> verificar si no hubo error  
  
@@ -164,7 +163,7 @@ int main (int argc, char ** argv) {
       int posX = dM10 / dArea;
       int posY = dM01 / dArea;
 
-      if (iLastX >= 0 && iLastY >= 0 && posX >= 0 && posY >= 0){
+      //if (iLastX >= 0 && iLastY >= 0 && posX >= 0 && posY >= 0){
 	   	     
 	circle(imgLines,Point2f(posX,posY),50,Scalar(255,0,0),1,CV_AA,0);
 	
@@ -190,7 +189,7 @@ int main (int argc, char ** argv) {
 	  }
 	  cout << " Camino a la Derecha" << endl ; 
 	}
-      }
+	//}
       iLastX = posX;
       iLastY = posY;
     }
